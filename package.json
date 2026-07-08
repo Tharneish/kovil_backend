@@ -1,0 +1,21 @@
+{
+  "name": "kovil-data-portal",
+  "version": "1.0.0",
+  "description": "Secure Data Collection and Admin Portal",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "hash": "node hash_password.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.0",
+    "express-session": "^1.18.0",
+    "mongodb-memory-server": "^11.2.0",
+    "mongoose": "^9.7.1",
+    "nodemailer": "^9.0.3"
+  }
+}
