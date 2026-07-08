@@ -178,7 +178,12 @@ async function sendRegistrationEmail(toEmail, submissionId, data) {
 }
 
 const mongoose = require('mongoose');
-const Submission = require('./models/Submission');
+let Submission;
+try {
+  Submission = require('./models/Submission');
+} catch (err) {
+  Submission = require('./Submission'); // Fallback for flattened GitHub upload
+}
 
 async function connectDB() {
   const uri = process.env.MONGODB_URI;
@@ -222,7 +227,10 @@ ensureDataFile();
 // Load dynamic fields config
 function loadFieldsConfig() {
   try {
-    const fieldsPath = path.join(__dirname, 'config', 'fields.json');
+    let fieldsPath = path.join(__dirname, 'config', 'fields.json');
+    if (!fs.existsSync(fieldsPath)) {
+      fieldsPath = path.join(__dirname, 'fields.json'); // Fallback for flattened GitHub upload
+    }
     const raw = fs.readFileSync(fieldsPath, 'utf-8');
     return JSON.parse(raw);
   } catch (err) {
@@ -301,8 +309,8 @@ app.use(
     saveUninitialized: true,
     cookie: {
       httpOnly: true,
-      secure: false, // Set to true if running over HTTPS
-      sameSite: 'strict',
+      secure: true, // Required for SameSite=None across Netlify/Render domains
+      sameSite: 'none',
       maxAge: 15 * 60 * 1000, // 15 Minutes inactivity timeout
     },
   })
@@ -333,6 +341,13 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Enable Global CORS for Netlify Frontend
+const cors = require('cors');
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+
 // Security & Cache Headers Middleware
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -355,6 +370,9 @@ function getOrGenerateCsrfToken(req) {
 
 function validateCsrfToken(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    return next();
+  }
+  if (req.path === '/api/trigger-email') {
     return next();
   }
   const clientToken = req.headers['x-csrf-token'];
@@ -429,7 +447,10 @@ app.get('/api/fields', (req, res) => {
   
   let incharges = {};
   try {
-    const inchargesPath = path.join(__dirname, 'config', 'incharges.json');
+    let inchargesPath = path.join(__dirname, 'config', 'incharges.json');
+    if (!fs.existsSync(inchargesPath)) {
+      inchargesPath = path.join(__dirname, 'incharges.json'); // Fallback for flattened GitHub upload
+    }
     if (fs.existsSync(inchargesPath)) {
       incharges = JSON.parse(fs.readFileSync(inchargesPath, 'utf-8'));
     }
@@ -440,7 +461,25 @@ app.get('/api/fields', (req, res) => {
   res.json({ fields, incharges, csrfToken: token });
 });
 
-// Submit User Details
+// Trigger Email Endpoint (called by Netlify frontend after saving to Firebase)
+app.post('/api/trigger-email', cors(), async (req, res) => {
+  const { email, id, name, village } = req.body;
+  if (!email || !id) {
+    return res.status(400).json({ error: 'Missing email or id' });
+  }
+  
+  // We mock a submission object because sendRegistrationEmail expects one
+  const submissionData = {
+    id: id,
+    name: name || 'Applicant',
+    village: village || 'Unknown'
+  };
+  
+  await sendRegistrationEmail(email, id, submissionData);
+  res.json({ success: true, message: 'Email queued successfully.' });
+});
+
+// Submit User Details (Original Route)
 app.post('/api/submit', submissionLimiter, async (req, res) => {
   try {
     const fields = loadFieldsConfig();
