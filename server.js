@@ -296,9 +296,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // Session Middleware
-const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const sessionSecret = process.env.SESSION_SECRET || 'Sri_Ilayaperumal_Temple_Stable_Secret_Key_2026_Secure';
 if (!process.env.SESSION_SECRET) {
-  console.warn('WARNING(security): SESSION_SECRET is not configured in .env. Generated an ephemeral session secret.');
+  console.warn('WARNING(security): SESSION_SECRET is not configured in .env. Using stable default fallback.');
 }
 
 // Trust proxy when running on Render/cloud so secure HTTPS cookies work properly across origin
