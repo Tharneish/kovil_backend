@@ -301,6 +301,9 @@ if (!process.env.SESSION_SECRET) {
   console.warn('WARNING(security): SESSION_SECRET is not configured in .env. Generated an ephemeral session secret.');
 }
 
+// Trust proxy when running on Render/cloud so secure HTTPS cookies work properly across origin
+app.set('trust proxy', 1);
+
 app.use(
   session({
     name: 'kovil_session',
@@ -360,10 +363,29 @@ app.use((req, res, next) => {
 
 app.use('/api/', globalLimiter);
 
-// CSRF Protection Middleware
+// CSRF Protection Middleware with HMAC fallback for cross-domain browsers blocking SameSite=None cookies
+function signCsrfToken(rawToken) {
+  const hmac = crypto.createHmac('sha256', sessionSecret).update(rawToken).digest('hex');
+  return `${rawToken}.${hmac}`;
+}
+
+function verifySignedCsrfToken(token) {
+  if (!token || typeof token !== 'string') return false;
+  const parts = token.split('.');
+  if (parts.length !== 2) return false;
+  const [rawToken, signature] = parts;
+  const expectedSignature = crypto.createHmac('sha256', sessionSecret).update(rawToken).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+  } catch (err) {
+    return false;
+  }
+}
+
 function getOrGenerateCsrfToken(req) {
-  if (!req.session.csrfToken) {
-    req.session.csrfToken = crypto.randomBytes(24).toString('hex');
+  if (!req.session.csrfToken || !verifySignedCsrfToken(req.session.csrfToken)) {
+    const raw = crypto.randomBytes(24).toString('hex');
+    req.session.csrfToken = signCsrfToken(raw);
   }
   return req.session.csrfToken;
 }
@@ -378,10 +400,14 @@ function validateCsrfToken(req, res, next) {
   const clientToken = req.headers['x-csrf-token'];
   const sessionToken = req.session ? req.session.csrfToken : null;
 
-  if (!sessionToken || clientToken !== sessionToken) {
-    return res.status(403).json({ error: 'CSRF token validation failed. Access denied.' });
+  // Hybrid validation: check exact session match OR verify cryptographically signed token
+  if (sessionToken && clientToken === sessionToken) {
+    return next();
   }
-  next();
+  if (verifySignedCsrfToken(clientToken)) {
+    return next();
+  }
+  return res.status(403).json({ error: 'CSRF token validation failed. Access denied.' });
 }
 
 app.use(validateCsrfToken);
