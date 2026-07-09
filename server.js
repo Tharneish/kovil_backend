@@ -32,20 +32,94 @@ mailTransporter.verify(function (error, success) {
   }
 });
 
+// Universal email sending helper supporting Resend API, Brevo API, and NodeMailer SMTP fallback
+async function sendEmail(toEmail, subject, html) {
+  // Option 1: Resend HTTP API (Modern, highly reliable web service, no SMTP blocks)
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.EMAIL_FROM || 'Sri Ilayaperumal Temple <onboarding@resend.dev>',
+          to: toEmail,
+          subject: subject,
+          html: html
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        console.log(`Email sent successfully via Resend API to: ${toEmail}`);
+        return true;
+      } else {
+        console.error('Resend API email send failure:', data);
+      }
+    } catch (err) {
+      console.error('Failed to send email via Resend API:', err.message);
+    }
+  }
 
-// Helper function to send approval confirmation email
-async function sendApprovalEmail(toEmail, submissionId, data) {
-  if (!toEmail) return;
+  // Option 2: Brevo HTTP API
+  if (process.env.BREVO_API_KEY) {
+    try {
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'api-key': process.env.BREVO_API_KEY,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: 'Sri Ilayaperumal Temple', email: process.env.EMAIL_USER || 'info@molasikannangulatrust.org' },
+          to: [{ email: toEmail }],
+          subject: subject,
+          htmlContent: html
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        console.log(`Email sent successfully via Brevo API to: ${toEmail}`);
+        return true;
+      } else {
+        console.error('Brevo API email send failure:', data);
+      }
+    } catch (err) {
+      console.error('Failed to send email via Brevo API:', err.message);
+    }
+  }
+
+  // Option 3: Fallback to NodeMailer SMTP (Port 465 SSL)
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-    console.warn('WARNING(email): EMAIL_USER or EMAIL_PASSWORD not defined. Skipping approval email.');
-    return;
+    console.warn('Skipping SMTP send fallback: EMAIL_USER or EMAIL_PASSWORD not defined.');
+    return false;
   }
 
   const mailOptions = {
     from: `"Sri Ilayaperumal Temple" <${process.env.EMAIL_USER}>`,
     to: toEmail,
-    subject: 'ஸ்ரீ இளையபெருமாள் திருக்கோயில் - விண்ணப்பம் ஒப்புதல் அளிக்கப்பட்டது / Application Approved',
-    html: `
+    subject: subject,
+    html: html
+  };
+
+  try {
+    await mailTransporter.sendMail(mailOptions);
+    console.log(`Email sent successfully via SMTP to: ${toEmail}`);
+    return true;
+  } catch (err) {
+    console.error('SMTP fallback email send error:', err.message);
+    return false;
+  }
+}
+
+// Helper function to send approval confirmation email
+async function sendApprovalEmail(toEmail, submissionId, data) {
+  if (!toEmail) return;
+
+  const subject = 'ஸ்ரீ இளையபெருமாள் திருக்கோயில் - விண்ணப்பம் ஒப்புதல் அளிக்கப்பட்டது / Application Approved';
+  const html = `
       <div style="font-family: 'Lato', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: #ffffff;">
         <div style="background-color: #15803d; padding: 20px; text-align: center; color: #ffffff;">
           <h2 style="margin: 0; font-family: 'Playfair Display', Georgia, serif; font-size: 1.5rem;">ஸ்ரீ இளையபெருமாள் திருக்கோயில்</h2>
@@ -78,29 +152,17 @@ async function sendApprovalEmail(toEmail, submissionId, data) {
         </div>
       </div>
     `
-  };
+  `;
 
-  try {
-    await mailTransporter.sendMail(mailOptions);
-    console.log(`Approval email sent successfully to: ${toEmail}`);
-  } catch (err) {
-    console.error('Error sending approval email:', err.message);
-  }
+  await sendEmail(toEmail, subject, html);
 }
 
 // Helper function to send decline notification email
 async function sendDeclineEmail(toEmail, data) {
   if (!toEmail) return;
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-    console.warn('WARNING(email): EMAIL_USER or EMAIL_PASSWORD not defined. Skipping decline email.');
-    return;
-  }
 
-  const mailOptions = {
-    from: `"Sri Ilayaperumal Temple" <${process.env.EMAIL_USER}>`,
-    to: toEmail,
-    subject: 'ஸ்ரீ இளையபெருமாள் திருக்கோயில் - விண்ணப்பம் நிராகரிக்கப்பட்டது / Application Declined',
-    html: `
+  const subject = 'ஸ்ரீ இளையபெருமாள் திருக்கோயில் - விண்ணப்பம் நிராகரிக்கப்பட்டது / Application Declined';
+  const html = `
       <div style="font-family: 'Lato', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: #ffffff;">
         <div style="background-color: #b91c1c; padding: 20px; text-align: center; color: #ffffff;">
           <h2 style="margin: 0; font-family: 'Playfair Display', Georgia, serif; font-size: 1.5rem;">ஸ்ரீ இளையபெருமாள் திருக்கோயில்</h2>
@@ -128,29 +190,17 @@ async function sendDeclineEmail(toEmail, data) {
         </div>
       </div>
     `
-  };
+  `;
 
-  try {
-    await mailTransporter.sendMail(mailOptions);
-    console.log(`Decline email sent successfully to: ${toEmail}`);
-  } catch (err) {
-    console.error('Error sending decline email:', err.message);
-  }
+  await sendEmail(toEmail, subject, html);
 }
 
 // Helper function to send registration confirmation email
 async function sendRegistrationEmail(toEmail, submissionId, data) {
   if (!toEmail) return;
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-    console.warn('WARNING(email): EMAIL_USER or EMAIL_PASSWORD not defined. Skipping registration email.');
-    return;
-  }
 
-  const mailOptions = {
-    from: `"Sri Ilayaperumal Temple" <${process.env.EMAIL_USER}>`,
-    to: toEmail,
-    subject: 'ஸ்ரீ இளையபெருமாள் திருக்கோயில் - விண்ணப்பம் பெறப்பட்டது / Application Received',
-    html: `
+  const subject = 'ஸ்ரீ இளையபெருமாள் திருக்கோயில் - விண்ணப்பம் பெறப்பட்டது / Application Received';
+  const html = `
       <div style="font-family: 'Lato', Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: #ffffff;">
         <div style="background-color: #0369a1; padding: 20px; text-align: center; color: #ffffff;">
           <h2 style="margin: 0; font-family: 'Playfair Display', Georgia, serif; font-size: 1.5rem;">ஸ்ரீ இளையபெருமாள் திருக்கோயில்</h2>
@@ -183,14 +233,9 @@ async function sendRegistrationEmail(toEmail, submissionId, data) {
         </div>
       </div>
     `
-  };
+  `;
 
-  try {
-    await mailTransporter.sendMail(mailOptions);
-    console.log(`Registration email sent successfully to: ${toEmail}`);
-  } catch (err) {
-    console.error('Error sending registration email:', err.message);
-  }
+  await sendEmail(toEmail, subject, html);
 }
 
 const mongoose = require('mongoose');
