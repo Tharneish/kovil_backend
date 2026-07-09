@@ -151,8 +151,7 @@ async function sendApprovalEmail(toEmail, submissionId, data) {
           This is an automated confirmation email. Please do not reply to this message.
         </div>
       </div>
-    `
-  `;
+    `;
 
   await sendEmail(toEmail, subject, html);
 }
@@ -189,8 +188,7 @@ async function sendDeclineEmail(toEmail, data) {
           This is an automated confirmation email. Please do not reply to this message.
         </div>
       </div>
-    `
-  `;
+    `;
 
   await sendEmail(toEmail, subject, html);
 }
@@ -232,8 +230,7 @@ async function sendRegistrationEmail(toEmail, submissionId, data) {
           This is an automated confirmation email. Please do not reply to this message.
         </div>
       </div>
-    `
-  `;
+    `;
 
   await sendEmail(toEmail, subject, html);
 }
