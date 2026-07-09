@@ -8,12 +8,17 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-// Configure Email Transporter using Gmail SMTP
+// Configure Email Transporter dynamically (defaulting to secure port 465 for Render compatibility)
 const mailTransporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.EMAIL_PORT) || 465,
+  secure: process.env.EMAIL_SECURE !== 'false', // Defaults to true (port 465 secure SSL)
   auth: {
-    user: process.env.EMAIL_USER,       // e.g., yourgmail@gmail.com
-    pass: process.env.EMAIL_PASSWORD   // Gmail App Password
+    user: process.env.EMAIL_USER,       // SMTP username / Gmail Address
+    pass: process.env.EMAIL_PASSWORD   // SMTP password / Gmail App Password
+  },
+  tls: {
+    rejectUnauthorized: false // Prevents certificate validation failures on cloud instances
   }
 });
 
@@ -21,11 +26,12 @@ const mailTransporter = nodemailer.createTransport({
 mailTransporter.verify(function (error, success) {
   if (error) {
     console.error("SMTP Mail Transporter verification failed on startup:", error.message);
-    console.error("Please check that EMAIL_USER and EMAIL_PASSWORD (Gmail App Password) are set correctly in your environment variables.");
+    console.error("If you are using Gmail and it fails, consider using Brevo (Sendinblue) or SendGrid which do not block cloud server IPs.");
   } else {
     console.log("SMTP Mail Transporter is ready to send emails!");
   }
 });
+
 
 // Helper function to send approval confirmation email
 async function sendApprovalEmail(toEmail, submissionId, data) {
