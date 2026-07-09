@@ -17,6 +17,16 @@ const mailTransporter = nodemailer.createTransport({
   }
 });
 
+// Verify Email Transporter configuration on startup
+mailTransporter.verify(function (error, success) {
+  if (error) {
+    console.error("SMTP Mail Transporter verification failed on startup:", error.message);
+    console.error("Please check that EMAIL_USER and EMAIL_PASSWORD (Gmail App Password) are set correctly in your environment variables.");
+  } else {
+    console.log("SMTP Mail Transporter is ready to send emails!");
+  }
+});
+
 // Helper function to send approval confirmation email
 async function sendApprovalEmail(toEmail, submissionId, data) {
   if (!toEmail) return;
